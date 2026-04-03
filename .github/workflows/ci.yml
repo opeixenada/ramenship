@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build and verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - name: Smoke test (preview serves)
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -sf --max-time 2 "http://127.0.0.1:4173/" >/dev/null; then
+              echo "Preview responded OK"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Preview did not become ready in time"
+          exit 1
