@@ -1,11 +1,9 @@
-import {
-  DodecahedronGeometry,
-  Euler,
-  Vector3,
-} from 'three'
-import type { BufferAttribute, InterleavedBufferAttribute } from 'three'
+import { Euler, Vector3 } from 'three'
+import type { BufferAttribute, BufferGeometry, InterleavedBufferAttribute } from 'three'
 
 import type { DotShape, PointShapeData } from './types'
+
+export type CreateRadiusGeometry = (radius: number) => BufferGeometry
 
 function sampleTriangleEdge(a: Vector3, b: Vector3, c: Vector3, p: Vector3): void {
   const e = Math.floor(Math.random() * 3)
@@ -40,7 +38,6 @@ function extractUniqueVertices(
   return [...map.values()]
 }
 
-/** 30 undirected edges of the regular dodecahedron (equal-length, minimum vertex separation). */
 function extractPolyhedronEdges(verts: Vector3[]): [Vector3, Vector3][] {
   if (verts.length < 2) {
     return []
@@ -73,15 +70,18 @@ function extractPolyhedronEdges(verts: Vector3[]): [Vector3, Vector3][] {
   return edges
 }
 
-type DodecaCaches = {
+type SolidCaches = {
   edges: [Vector3, Vector3][]
   tris: Tri[]
   cumArea: number[]
   totalArea: number
 }
 
-function buildDodecaCaches(radius: number): DodecaCaches {
-  const geo = new DodecahedronGeometry(radius, 0)
+function buildSolidCaches(
+  createGeometry: CreateRadiusGeometry,
+  radius: number,
+): SolidCaches {
+  const geo = createGeometry(radius)
   const pos = geo.attributes.position
   const verts = extractUniqueVertices(pos)
   const edges = extractPolyhedronEdges(verts)
@@ -130,36 +130,49 @@ function pickTriangle(
   return tris[tris.length - 1]!
 }
 
-function triangleOutwardNormal(va: Vector3, vb: Vector3, vc: Vector3, ab: Vector3, ac: Vector3, n: Vector3): void {
+function triangleOutwardNormal(
+  va: Vector3,
+  vb: Vector3,
+  vc: Vector3,
+  ab: Vector3,
+  ac: Vector3,
+  n: Vector3,
+): void {
   ab.subVectors(vb, va)
   ac.subVectors(vc, va)
   n.crossVectors(ab, ac).normalize()
 }
 
 /**
- * Regular dodecahedron: dots heavily on true polyhedron edges (30), lightly on
- * triangulation edges, rarely in triangle interiors.
+ * Dots on any Three.js solid given as indexed/non-indexed triangles (capsule, tetra, octa, …).
+ * Heavy bias toward shortest graph edges, then face edges, then interiors.
  */
-export class DodecahedronDotShape implements DotShape {
+export class TriangulatedPolyhedronDotShape implements DotShape {
   readonly rotation: Euler
   readonly scale: number
   readonly radius: number
+  readonly createGeometry: CreateRadiusGeometry
   readonly edges: [Vector3, Vector3][]
   readonly tris: Tri[]
   readonly cumArea: number[]
   readonly totalArea: number
   readonly thick: number
 
-  /**
-   * @param radius Circumradius in local space (vertex distance from origin).
-   *   Match cube: `half * Math.sqrt(3)` for the same bounding sphere as a cube of half-edge `half`.
-   */
-  constructor(rotation: Euler, scale: number, radius = 0.5 * Math.sqrt(3)) {
+  constructor(
+    rotation: Euler,
+    scale: number,
+    radius: number,
+    createGeometry: CreateRadiusGeometry,
+  ) {
     this.rotation = rotation
     this.scale = scale
     this.radius = radius
+    this.createGeometry = createGeometry
     this.thick = radius * 0.12
-    const { edges, tris, cumArea, totalArea } = buildDodecaCaches(radius)
+    const { edges, tris, cumArea, totalArea } = buildSolidCaches(
+      createGeometry,
+      radius,
+    )
     this.edges = edges
     this.tris = tris
     this.cumArea = cumArea

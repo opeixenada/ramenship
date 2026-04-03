@@ -1,49 +1,49 @@
 import { smoothstep01 } from './smoothstep'
 
 /**
- * Seconds for one full sphere → cube → dodecahedron → sphere cycle.
- * Long enough for several visual breath cycles (~10.5s each) per shape hold.
+ * Seconds for one full cycle through all shapes (sphere → … → back to sphere).
  */
 export const MORPH_PERIOD = 96
 
-/** Same transition length (each of 3); small = snappy morphs. */
-const TRANSITION = 0.016
+/** Per transition between adjacent shapes in the cycle (fraction of one period). */
+const TRANSITION = 0.014
 
-/** Same hold for sphere, cube, and dodecahedron: (1 − 3·transition) / 3. */
-const HOLD = (1 - 3 * TRANSITION) / 3
-
-export type MorphWeights3 = readonly [number, number, number]
-
-/** [sphere, cube, dodecahedron] weights; always sum to 1. */
-export function morphWeightsThreeShapes(
+/**
+ * Piecewise schedule: hold shape i, ease to i+1, …, last eases back to 0.
+ * `out` must have length ≥ n; only first n entries are written.
+ */
+export function morphWeightsNShapesInto(
+  out: number[],
+  n: number,
   t: number,
   phase: number,
   period: number,
-): MorphWeights3 {
+): void {
+  if (n < 1) {
+    return
+  }
+  out.fill(0, 0, n)
+
   let u = ((t + phase) / period) % 1
   if (u < 0) u += 1
-  const a1 = HOLD
-  const a2 = a1 + TRANSITION
-  const a3 = a2 + HOLD
-  const a4 = a3 + TRANSITION
-  const a5 = a4 + HOLD
-  if (u < a1) {
-    return [1, 0, 0]
+
+  const hold = (1 - n * TRANSITION) / n
+
+  for (let i = 0; i < n; i++) {
+    const startHold = i * (hold + TRANSITION)
+    const endHold = startHold + hold
+    const endTrans = endHold + TRANSITION
+
+    if (u >= startHold && u < endHold) {
+      out[i] = 1
+      return
+    }
+    if (u >= endHold && u < endTrans) {
+      const k = smoothstep01((u - endHold) / TRANSITION)
+      const next = (i + 1) % n
+      out[i] = 1 - k
+      out[next] = k
+      return
+    }
   }
-  if (u < a2) {
-    const k = smoothstep01((u - a1) / TRANSITION)
-    return [1 - k, k, 0]
-  }
-  if (u < a3) {
-    return [0, 1, 0]
-  }
-  if (u < a4) {
-    const k = smoothstep01((u - a3) / TRANSITION)
-    return [0, 1 - k, k]
-  }
-  if (u < a5) {
-    return [0, 0, 1]
-  }
-  const k = smoothstep01((u - a5) / TRANSITION)
-  return [k, 0, 1 - k]
 }

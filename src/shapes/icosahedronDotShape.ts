@@ -1,8 +1,4 @@
-import {
-  DodecahedronGeometry,
-  Euler,
-  Vector3,
-} from 'three'
+import { Euler, IcosahedronGeometry, Vector3 } from 'three'
 import type { BufferAttribute, InterleavedBufferAttribute } from 'three'
 
 import type { DotShape, PointShapeData } from './types'
@@ -40,7 +36,7 @@ function extractUniqueVertices(
   return [...map.values()]
 }
 
-/** 30 undirected edges of the regular dodecahedron (equal-length, minimum vertex separation). */
+/** Undirected edges of the regular icosahedron (equal-length, minimum vertex separation). */
 function extractPolyhedronEdges(verts: Vector3[]): [Vector3, Vector3][] {
   if (verts.length < 2) {
     return []
@@ -73,15 +69,15 @@ function extractPolyhedronEdges(verts: Vector3[]): [Vector3, Vector3][] {
   return edges
 }
 
-type DodecaCaches = {
+type IcosaCaches = {
   edges: [Vector3, Vector3][]
   tris: Tri[]
   cumArea: number[]
   totalArea: number
 }
 
-function buildDodecaCaches(radius: number): DodecaCaches {
-  const geo = new DodecahedronGeometry(radius, 0)
+function buildIcosaCaches(radius: number): IcosaCaches {
+  const geo = new IcosahedronGeometry(radius, 0)
   const pos = geo.attributes.position
   const verts = extractUniqueVertices(pos)
   const edges = extractPolyhedronEdges(verts)
@@ -130,17 +126,24 @@ function pickTriangle(
   return tris[tris.length - 1]!
 }
 
-function triangleOutwardNormal(va: Vector3, vb: Vector3, vc: Vector3, ab: Vector3, ac: Vector3, n: Vector3): void {
+function triangleOutwardNormal(
+  va: Vector3,
+  vb: Vector3,
+  vc: Vector3,
+  ab: Vector3,
+  ac: Vector3,
+  n: Vector3,
+): void {
   ab.subVectors(vb, va)
   ac.subVectors(vc, va)
   n.crossVectors(ab, ac).normalize()
 }
 
 /**
- * Regular dodecahedron: dots heavily on true polyhedron edges (30), lightly on
+ * Regular icosahedron: dots heavily on true polyhedron edges (30), lightly on
  * triangulation edges, rarely in triangle interiors.
  */
-export class DodecahedronDotShape implements DotShape {
+export class IcosahedronDotShape implements DotShape {
   readonly rotation: Euler
   readonly scale: number
   readonly radius: number
@@ -159,7 +162,7 @@ export class DodecahedronDotShape implements DotShape {
     this.scale = scale
     this.radius = radius
     this.thick = radius * 0.12
-    const { edges, tris, cumArea, totalArea } = buildDodecaCaches(radius)
+    const { edges, tris, cumArea, totalArea } = buildIcosaCaches(radius)
     this.edges = edges
     this.tris = tris
     this.cumArea = cumArea

@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   Euler,
   Group,
+  OctahedronGeometry,
   Points,
   ShaderMaterial,
   Vector3,
@@ -11,9 +12,12 @@ import {
 import {
   CubeDotShape,
   DodecahedronDotShape,
+  IcosahedronDotShape,
   MORPH_PERIOD,
-  morphWeightsThreeShapes,
+  morphWeightsNShapesInto,
   SphereDotShape,
+  TorusDotShape,
+  TriangulatedPolyhedronDotShape,
 } from './shapes'
 
 const COUNT = 2800
@@ -78,13 +82,20 @@ const fragmentShader = /* glsl */ `
   }
 `
 
+function randomEuler(): Euler {
+  return new Euler(
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2,
+    Math.random() * Math.PI * 2,
+    'XYZ',
+  )
+}
+
 export function createDotCloud(): {
   group: Group
   material: ShaderMaterial
   update: (t: number) => void
-  /** World-space positions in dotCloud.group; updated each `update()`. */
   pointPositions: Float32Array
-  /** Per-point hue seed `aTint`; stable for the session (matches points shader). */
   pointTints: Float32Array
   pointCount: number
 } {
@@ -101,48 +112,54 @@ export function createDotCloud(): {
     () => Math.random() * Math.PI * 2,
   )
 
-  const cubeRot = new Euler(
-    Math.random() * Math.PI * 2,
-    Math.random() * Math.PI * 2,
-    Math.random() * Math.PI * 2,
-    'XYZ',
-  )
-  const dodecaRot = new Euler(
-    Math.random() * Math.PI * 2,
-    Math.random() * Math.PI * 2,
-    Math.random() * Math.PI * 2,
-    'XYZ',
-  )
-  /** One scale for cube + dodeca so they share the same envelope size. */
+  const cubeRot = randomEuler()
   const morphShapeScale = 1.68 + Math.random() * 0.3
   const morphPhase = Math.random() * MORPH_PERIOD
 
   const cubeHalf = 0.5
-  /** Cube corners & dodeca vertices share this distance from center (after scale). */
   const polyCircumR = cubeHalf * Math.sqrt(3) * morphShapeScale
-  /**
-   * Sphere shell radii are shellRadius × [0.88, 1.0]. Keep outer edge ~inside poly
-   * circumradius so the ball doesn’t read larger than cube/dodeca.
-   */
   const sphereShellR = polyCircumR * 0.88
-  const dodecaLocalRadius = cubeHalf * Math.sqrt(3)
+  const polyLocalR = cubeHalf * Math.sqrt(3)
 
   const sphereShape = new SphereDotShape(sphereShellR)
   const cubeShape = new CubeDotShape(cubeRot, morphShapeScale, cubeHalf)
   const dodecaShape = new DodecahedronDotShape(
-    dodecaRot,
+    randomEuler(),
     morphShapeScale,
-    dodecaLocalRadius,
+    polyLocalR,
   )
+  const icosaShape = new IcosahedronDotShape(
+    randomEuler(),
+    morphShapeScale,
+    polyLocalR,
+  )
+  const octaShape = new TriangulatedPolyhedronDotShape(
+    randomEuler(),
+    morphShapeScale,
+    polyLocalR,
+    (r: number) => new OctahedronGeometry(r, 0),
+  )
+  const torusShape = new TorusDotShape(randomEuler(), morphShapeScale, polyLocalR)
+
+  const shapes = [
+    sphereShape,
+    cubeShape,
+    dodecaShape,
+    icosaShape,
+    octaShape,
+    torusShape,
+  ] as const
+
+  const shapeCount = shapes.length
 
   const sphereData = sphereShape.build(COUNT)
-  const cubeData = cubeShape.build(COUNT)
-  const dodecaData = dodecaShape.build(COUNT)
-
   const bases = sphereData.targets
+  const allTargets: Vector3[][] = [
+    bases,
+    ...shapes.slice(1).map((s) => s.build(COUNT).targets),
+  ]
+
   const { normals, t1s, t2s } = sphereShape.tangentFrameFor(bases)
-  const cubeTargets = cubeData.targets
-  const dodecaTargets = dodecaData.targets
 
   const positions = new Float32Array(COUNT * 3)
   const tints = new Float32Array(COUNT)
@@ -198,17 +215,21 @@ export function createDotCloud(): {
   const tang = new Vector3()
   const posArr = positions
 
-  function update(t: number) {
+  const wSched = new Array(shapeCount).fill(0)
+
+  function update(t: number): void {
+    morphWeightsNShapesInto(wSched, shapeCount, t, morphPhase, MORPH_PERIOD)
+
+    let morphAmt = 0
+    for (let s = 1; s < shapeCount; s++) {
+      morphAmt += wSched[s]!
+    }
+    morphAmt = Math.min(1, morphAmt)
+
     const ampR = 0.055
     const ampT = 0.016
 
-    const [w0, w1, w2] = morphWeightsThreeShapes(t, morphPhase, MORPH_PERIOD)
-    const morphAmt = Math.min(1, w1 + w2)
-
     for (let i = 0; i < COUNT; i++) {
-      const base = bases[i]!
-      const cubeEnd = cubeTargets[i]!
-      const dodecaEnd = dodecaTargets[i]!
       const n = normals[i]!
       const t1 = t1s[i]!
       const t2 = t2s[i]!
@@ -216,9 +237,10 @@ export function createDotCloud(): {
       const rp = radialPhases[i]!
       const f = freq[i]!
 
-      pos.copy(base).multiplyScalar(w0)
-      pos.addScaledVector(cubeEnd, w1)
-      pos.addScaledVector(dodecaEnd, w2)
+      pos.set(0, 0, 0)
+      for (let s = 0; s < shapeCount; s++) {
+        pos.addScaledVector(allTargets[s]![i]!, wSched[s]!)
+      }
 
       const ft = t * radialFreqSession + radialTimePhase
       const globalR = Math.sin(ft)
