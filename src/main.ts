@@ -10,6 +10,7 @@ import {
   WebGLRenderer,
 } from 'three'
 import { createDotCloud } from './dotCloud'
+import { createZapSystem } from './zaps'
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 app.innerHTML = ''
@@ -34,6 +35,14 @@ app.appendChild(renderer.domElement)
 
 const dotCloud = createDotCloud()
 scene.add(dotCloud.group)
+
+const zaps = createZapSystem(
+  dotCloud.group,
+  dotCloud.pointCount,
+  () => dotCloud.pointPositions,
+  () => dotCloud.pointTints,
+  dotCloud.material,
+)
 
 const canvas = renderer.domElement
 
@@ -169,6 +178,7 @@ renderer.setAnimationLoop(() => {
   dotCloud.group.rotation.set(pointer.rotX, pointer.rotY, pointer.rotZ)
 
   dotCloud.update(t)
+  zaps.update(t, dt)
 
   const p = pointer.presence
   camera.position.x = pointer.x * 0.48 * p

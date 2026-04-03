@@ -82,6 +82,11 @@ export function createDotCloud(): {
   group: Group
   material: ShaderMaterial
   update: (t: number) => void
+  /** World-space positions in dotCloud.group; updated each `update()`. */
+  pointPositions: Float32Array
+  /** Per-point hue seed `aTint`; stable for the session (matches points shader). */
+  pointTints: Float32Array
+  pointCount: number
 } {
   const group = new Group()
 
@@ -247,5 +252,12 @@ export function createDotCloud(): {
     geometry.attributes.position.needsUpdate = true
   }
 
-  return { group, material, update }
+  return {
+    group,
+    material,
+    update,
+    pointPositions: positions,
+    pointTints: tints,
+    pointCount: COUNT,
+  }
 }
