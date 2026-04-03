@@ -5,7 +5,6 @@ on: pull_request
 permissions:
   contents: write
   pull-requests: write
-  actions: write
 
 jobs:
   auto-merge:
@@ -28,7 +27,7 @@ jobs:
           for _ in $(seq 1 180); do
             state=$(gh pr view "$pr" --repo "$repo" --json state -q .state)
             if [ "$state" = "MERGED" ]; then
-              gh workflow run deploy-pages.yml --repo "$repo" --ref main
+              gh api --method POST "repos/$repo/dispatches" -f event_type='dependabot-pages-deploy'
               exit 0
             fi
             if [ "$state" = "CLOSED" ]; then

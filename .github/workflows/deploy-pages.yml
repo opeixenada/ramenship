@@ -3,8 +3,9 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
-  # Lets Dependabot auto-merge trigger a deploy (GITHUB_TOKEN merges do not fire `push` workflows).
-  workflow_dispatch:
+  # Invoked only from dependabot-auto-merge.yml (event name must stay in sync).
+  repository_dispatch:
+    types: [dependabot-pages-deploy]
 
 permissions:
   contents: read
