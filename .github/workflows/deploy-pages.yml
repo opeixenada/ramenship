@@ -3,6 +3,9 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  # Invoked only from dependabot-auto-merge.yml (event name must stay in sync).
+  repository_dispatch:
+    types: [dependabot-pages-deploy]
 
 permissions:
   contents: read
