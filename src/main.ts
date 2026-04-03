@@ -6,9 +6,14 @@ import {
   PerspectiveCamera,
   Points,
   PointsMaterial,
+  Raycaster,
   Scene,
+  Sphere,
+  Vector2,
+  Vector3,
   WebGLRenderer,
 } from 'three'
+import { createMergeBurst } from './burstMerge'
 import { createDotCloud } from './dotCloud'
 import { createZapSystem } from './zaps'
 
@@ -44,7 +49,35 @@ const zaps = createZapSystem(
   dotCloud.material,
 )
 
+const mergeBurst = createMergeBurst({
+  parent: dotCloud.group,
+  pointCount: dotCloud.pointCount,
+  getPositions: () => dotCloud.pointPositions,
+})
+
+const raycaster = new Raycaster()
+const ndcBurst = new Vector2()
+const burstHitSphere = new Sphere(new Vector3(0, 0, 0), 2.4)
+const burstHitPoint = new Vector3()
+
 const canvas = renderer.domElement
+
+canvas.addEventListener('click', (e: MouseEvent) => {
+  const r = canvas.getBoundingClientRect()
+  ndcBurst.x = ((e.clientX - r.left) / r.width) * 2 - 1
+  ndcBurst.y = -(((e.clientY - r.top) / r.height) * 2 - 1)
+  raycaster.setFromCamera(ndcBurst, camera)
+  burstHitSphere.radius = 2.45 * dotCloud.group.scale.x
+  const tSec = (performance.now() - clock.start) * 0.001
+  if (raycaster.ray.intersectSphere(burstHitSphere, burstHitPoint)) {
+    mergeBurst.spawnAtWorld(burstHitPoint, tSec)
+  } else {
+    burstHitPoint
+      .copy(raycaster.ray.origin)
+      .addScaledVector(raycaster.ray.direction, 5.2)
+    mergeBurst.spawnAtWorld(burstHitPoint, tSec)
+  }
+})
 
 const pointer = {
   inside: false,
@@ -179,6 +212,14 @@ renderer.setAnimationLoop(() => {
 
   dotCloud.update(t)
   zaps.update(t, dt)
+  mergeBurst.setPixelRatio(renderer.getPixelRatio())
+  mergeBurst.setSizeRef(dotCloud.material.uniforms.uSizeRef!.value as number)
+  mergeBurst.setSpectrum(dotCloud.material.uniforms.uSpectrum!.value as number)
+  mergeBurst.setPointerGlow(dotCloud.material.uniforms.uPointerGlow!.value as number)
+  mergeBurst.setCursorInside(
+    dotCloud.material.uniforms.uCursorInside!.value as number,
+  )
+  mergeBurst.update(t, dt)
 
   const p = pointer.presence
   camera.position.x = pointer.x * 0.48 * p
